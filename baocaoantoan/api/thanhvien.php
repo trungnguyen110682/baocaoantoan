@@ -1,4 +1,8 @@
 <?php
+@set_time_limit(300);
+@ini_set('memory_limit', '256M');
+@ini_set('display_errors', 0);
+error_reporting(0);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/helpers.php';
@@ -66,6 +70,13 @@ if ($method === 'POST') {
         $inserted = 0; $updated = 0; $skipped = 0; $errors = [];
         $validRoles = ['nhanvien', 'nguoikhacphuc', 'quanly'];
 
+        // Lấy tất cả ma_nv hiện có 1 lần để tránh query vòng lặp
+        $existingMaNV = [];
+        $allExisting = dbAll("SELECT ma_nv FROM thanhvien WHERE ma_nv IS NOT NULL");
+        foreach ($allExisting as $e) $existingMaNV[$e['ma_nv']] = true;
+
+        $insertBatch = []; // gom INSERT để bulk insert
+
         foreach ($rows as $i => $r) {
             $hoTen = trim($r['ho_ten'] ?? '');
             if ($hoTen === '') { $errors[] = "Dòng " . ($i+2) . ": Thiếu họ tên"; continue; }
@@ -77,24 +88,32 @@ if ($method === 'POST') {
             $email  = trim($r['email']   ?? '') ?: null;
             $vaiTro = in_array($r['vai_tro'] ?? '', $validRoles) ? $r['vai_tro'] : 'nhanvien';
 
-            // Kiểm tra tồn tại theo ma_nv (nếu có)
-            $exists = $maNV ? dbOne("SELECT id FROM thanhvien WHERE ma_nv = ?", [$maNV]) : null;
-
-            if ($exists) {
+            if ($maNV && isset($existingMaNV[$maNV])) {
                 if ($mode === 'skip') { $skipped++; continue; }
-                // upsert — cập nhật
                 dbExec(
                     "UPDATE thanhvien SET ho_ten=?, bo_phan=?, xuong=?, chuc_vu=?, email=?, vai_tro=? WHERE ma_nv=?",
                     [$hoTen, $boPhan, $xuong, $chucVu, $email, $vaiTro, $maNV]
                 );
                 $updated++;
             } else {
-                dbExec(
-                    "INSERT INTO thanhvien (ma_nv, ho_ten, bo_phan, xuong, chuc_vu, email, vai_tro) VALUES (?,?,?,?,?,?,?)",
-                    [$maNV, $hoTen, $boPhan, $xuong, $chucVu, $email, $vaiTro]
-                );
+                $insertBatch[] = [$maNV, $hoTen, $boPhan, $xuong, $chucVu, $email, $vaiTro];
                 $inserted++;
             }
+        }
+
+        // Bulk INSERT theo batch 50 dòng dùng transaction
+        db()->beginTransaction();
+        try {
+            foreach (array_chunk($insertBatch, 50) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '(?,?,?,?,?,?,?)'));
+                $params = [];
+                foreach ($chunk as $row) foreach ($row as $v) $params[] = $v;
+                dbExec("INSERT INTO thanhvien (ma_nv,ho_ten,bo_phan,xuong,chuc_vu,email,vai_tro) VALUES {$placeholders}", $params);
+            }
+            db()->commit();
+        } catch (Exception $ex) {
+            db()->rollBack();
+            jsonResponse(['error' => 'Lỗi insert: ' . $ex->getMessage()], 500);
         }
 
         jsonResponse([

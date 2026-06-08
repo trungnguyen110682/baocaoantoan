@@ -92,17 +92,18 @@ require_once __DIR__ . '/../config/app.php';
         <!-- Xưởng -->
         <div class="fs">
           <label class="fl" for="xuong">Xưởng <span class="req" id="xuong-req">*</span></label>
-          <select id="xuong" class="fc">
+          <select id="xuong" class="fc" onchange="loadKhuVuc(this.value)">
             <option value="">-- Chọn xưởng --</option>
-            <option>Xuong F0</option>
-            <option>Xuong F1</option>
-            <option>Xuong F2</option>
-            <option>Xuong F3</option>
-            <option>Kho van</option>
-            <option>Utility</option>
-            <option>ADM</option>
           </select>
           <div class="ferr" id="err-xuong">Vui lòng chọn xưởng</div>
+        </div>
+
+        <!-- Khu vực -->
+        <div class="fs" id="khuvuc-wrap" style="display:none;">
+          <label class="fl" for="khuvuc">Khu vực</label>
+          <select id="khuvuc" class="fc" onchange="onKhuVucChange(this.value)">
+            <option value="">-- Chọn khu vực --</option>
+          </select>
         </div>
 
         <!-- Vị trí -->
@@ -163,6 +164,50 @@ require_once __DIR__ . '/../config/app.php';
 <script>
 let foundEmployee = false;
 let fromGemba = false;
+
+// Load danh sách xưởng từ API
+async function loadXuongList(selectedXuong) {
+  try {
+    const res = await fetch('/api/qrcore.php?action=xuong');
+    const list = await res.json();
+    const sel = document.getElementById('xuong');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn xưởng --</option>' +
+      list.map(x => `<option value="${x}" ${x===(selectedXuong||cur)?'selected':''}>${x}</option>`).join('');
+    if (selectedXuong) loadKhuVuc(selectedXuong);
+  } catch(e) {}
+}
+
+// Load khu vực theo xưởng và tự điền vào vitri
+async function loadKhuVuc(xuong) {
+  const wrap = document.getElementById('khuvuc-wrap');
+  const sel  = document.getElementById('khuvuc');
+  if (!xuong) { wrap.style.display='none'; return; }
+  try {
+    const res  = await fetch(`/api/qrcore.php?action=khuvuc&xuong=${encodeURIComponent(xuong)}`);
+    const list = await res.json();
+    if (list.length > 0) {
+      sel.innerHTML = '<option value="">-- Chọn khu vực --</option>' +
+        list.map(k=>`<option value="${k}">${k}</option>`).join('');
+      wrap.style.display = '';
+    } else {
+      wrap.style.display = 'none';
+    }
+  } catch(e) { wrap.style.display='none'; }
+}
+
+// Khi chọn khu vực → điền vào vitri
+function onKhuVucChange(val) {
+  const vitriEl = document.getElementById('vitri');
+  if (vitriEl && !vitriEl.readOnly) { vitriEl.value = val; }
+}
+
+// Khởi động load xưởng (và pre-fill Gemba nếu có params)
+document.addEventListener('DOMContentLoaded', () => {
+  const p = new URLSearchParams(location.search);
+  const gembaXuong = p.get('xuong') || '';
+  loadXuongList(gembaXuong || undefined);
+});
 
 // Pre-fill từ Gemba nếu có URL params
 (function prefillFromGemba() {
@@ -235,10 +280,10 @@ async function submitBC() {
   const fc2  = (id) => { const el=document.getElementById(id); if(el) el.classList.remove('err'); };
 
   const manv   = document.getElementById('manv').value.trim().toUpperCase();
-  const hoten  = document.getElementById('hoten').value.trim();
+  const hoten   = document.getElementById('hoten').value.trim();
   const xuongEl = document.getElementById('xuong');
-  const xuong  = xuongEl.options[xuongEl.selectedIndex]?.value || '';
-  const vitri  = document.getElementById('vitri').value.trim();
+  const xuong   = xuongEl.options[xuongEl.selectedIndex]?.value || '';
+  const vitri   = document.getElementById('vitri').value.trim();
   const noidung= document.getElementById('noidung').value.trim();
   const file   = document.getElementById('file-input').files[0];
 
@@ -297,6 +342,7 @@ function resetForm() {
   document.getElementById('success-state').style.display = 'none';
   ['manv','hoten','bophan','vitri','noidung'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('xuong').value = '';
+  document.getElementById('khuvuc-wrap').style.display = 'none';
   document.getElementById('file-input').value = '';
   document.getElementById('img-preview').style.display = 'none';
   document.getElementById('uarea').classList.remove('has-file');

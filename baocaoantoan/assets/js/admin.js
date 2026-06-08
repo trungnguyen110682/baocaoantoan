@@ -964,9 +964,187 @@ function loadHopDauCa() {
 
 // ── QR Table ──────────────────────────────────────────────────
 function renderQRTable() {
-  document.getElementById('qr-tbody').innerHTML = allQR.map(q=>`
-    <tr><td class="tbl-id">${q.ma_qr}</td><td>${q.xuong||'—'}</td><td>${q.khu_vuc||'—'}</td><td>${q.phu_trach||'—'}</td>
-    <td><a href="/pages/gemba.php?qr=${q.ma_qr}" target="_blank" class="btn btn-ghost btn-xs">Mở form</a></td></tr>`).join('');
+  // Populate filter
+  const filterSel = document.getElementById('qr-filter-xuong');
+  const curVal = filterSel?.value || '';
+  const xuongList = [...new Set(allQR.map(q=>q.xuong).filter(Boolean))].sort();
+  if (filterSel) {
+    filterSel.innerHTML = '<option value="">Tất cả xưởng</option>' +
+      xuongList.map(x=>`<option value="${x}" ${x===curVal?'selected':''}>${x}</option>`).join('');
+  }
+  renderQRList();
+}
+
+function renderQRList() {
+  const filter = document.getElementById('qr-filter-xuong')?.value || '';
+  const filtered = filter ? allQR.filter(q=>q.xuong===filter) : allQR;
+  document.getElementById('qr-sub').textContent = `${filtered.length} / ${allQR.length} khu vực`;
+  document.getElementById('qr-tbody').innerHTML = filtered.map(q=>`
+    <tr>
+      <td class="tbl-id">${q.ma_qr}</td>
+      <td>${q.xuong||'—'}</td>
+      <td>${q.khu_vuc||'—'}</td>
+      <td>${q.phu_trach||'—'}</td>
+      <td><a href="/pages/gemba.php?qr=${q.ma_qr}" target="_blank" class="btn btn-ghost btn-xs">Mở form</a></td>
+      <td style="text-align:center;"><button class="btn btn-red btn-xs" onclick="deleteQR(${q.id},'${(q.khu_vuc||'').replace(/'/g,"\\'")}')">🗑</button></td>
+    </tr>`).join('') || '<tr><td colspan="6"><div class="empty"><p>Không có dữ liệu</p></div></td></tr>';
+}
+
+async function deleteQR(id, name) {
+  if (!confirm(`Xóa khu vực "${name}"?`)) return;
+  const r = await fetch(`/api/qrcore.php?id=${id}`, { method:'DELETE', credentials:'same-origin' });
+  const d = await r.json();
+  if (d.success) {
+    allQR = allQR.filter(q=>q.id!==id);
+    renderQRTable();
+    showToast('Đã xóa khu vực', 'success');
+  }
+}
+
+function exportQRList() {
+  const rows = [['Mã QR','Xưởng','Khu vực','Phụ trách','Link']];
+  allQR.forEach(q=>rows.push([q.ma_qr,q.xuong||'',q.khu_vuc||'',q.phu_trach||'',
+    `${location.origin}/pages/gemba.php?qr=${q.ma_qr}`]));
+  const csv = rows.map(r=>r.map(c=>`"${(c+'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
+  a.download = 'danh_sach_qr.csv';
+  a.click();
+  showToast('Đã xuất danh sách QR', 'success');
+}
+
+// ── Import QR từ Excel ────────────────────────────────────────
+let qrImportRows = [];
+
+const QR_IMPORT_COLS = {
+  'xuong':'xuong','xưởng':'xuong','xuong':'xuong',
+  'khu_vuc':'khu_vuc','khu vực':'khu_vuc','khu vuc':'khu_vuc','khu_vuc':'khu_vuc',
+  'phu_trach':'phu_trach','phụ trách':'phu_trach','phu trach':'phu_trach','phụ trách':'phu_trach',
+};
+
+function openQRImport() {
+  resetQRImport();
+  openModal('modal-qr-import');
+}
+
+function resetQRImport() {
+  qrImportRows = [];
+  document.getElementById('qr-imp-step1').style.display = '';
+  document.getElementById('qr-imp-step2').style.display = 'none';
+  document.getElementById('qr-imp-confirm-btn').style.display = 'none';
+  const fi = document.getElementById('qr-imp-file');
+  if (fi) fi.value = '';
+}
+
+// Sinh mã QR từ tên (giống PHP)
+function genQRCode(xuong, khuVuc) {
+  const removeAccents = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');
+  const x = removeAccents(xuong);
+  const k = removeAccents(khuVuc);
+  let xCode;
+  if (x.includes('-')) {
+    const parts = x.split('-');
+    const prefix = parts[0].trim().replace(/\s+/g,'');
+    const suffix = parts[1].trim().replace(/\s+/g,'');
+    xCode = prefix + '-' + suffix;
+  } else {
+    xCode = x.replace(/[^A-Za-z0-9]/g,'');
+  }
+  const kWords = k.trim().split(/\s+/);
+  const kCode = kWords.length <= 2
+    ? kWords.join('').replace(/[^A-Za-z0-9]/g,'')
+    : kWords.map(w=>w[0]?.toUpperCase()||'').join('');
+  return 'QR-' + xCode + '-' + kCode;
+}
+
+async function handleQRImportFile(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') {
+    await new Promise((res,rej)=>{
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+  const buf = await file.arrayBuffer();
+  const wb  = XLSX.read(buf, {type:'array'});
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+  if (!raw || raw.length < 2) { showToast('File không có dữ liệu', 'error'); return; }
+
+  // Tìm header row
+  let headerIdx = 0;
+  const colMap = {};
+  for (let ri = 0; ri < Math.min(raw.length, 10); ri++) {
+    const tryH = raw[ri].map(h=>(h+'').toLowerCase().trim());
+    const tryM = {};
+    tryH.forEach((h,i)=>{ const f=QR_IMPORT_COLS[h]; if(f) tryM[i]=f; });
+    if (tryM && (Object.values(tryM).includes('xuong') || Object.values(tryM).includes('khu_vuc'))) {
+      headerIdx = ri;
+      Object.assign(colMap, tryM);
+      break;
+    }
+  }
+
+  if (!Object.values(colMap).includes('xuong') || !Object.values(colMap).includes('khu_vuc')) {
+    showToast('Không tìm thấy cột "Xưởng" hoặc "Khu vực" trong file', 'error'); return;
+  }
+
+  const rows = [];
+  for (let i = headerIdx+1; i < raw.length; i++) {
+    const row = raw[i];
+    if (row.every(c=>(c+'').trim()==='')) continue;
+    const obj = {};
+    Object.entries(colMap).forEach(([idx,field])=>{ obj[field]=(row[idx]+'').trim(); });
+    if (!obj.xuong || !obj.khu_vuc) continue;
+    obj.ma_qr_preview = genQRCode(obj.xuong, obj.khu_vuc);
+    rows.push(obj);
+  }
+
+  if (!rows.length) { showToast('Không có dữ liệu hợp lệ', 'error'); return; }
+
+  qrImportRows = rows;
+  document.getElementById('qr-imp-summary').textContent = `📊 Đọc được ${rows.length} khu vực`;
+  document.getElementById('qr-imp-preview-body').innerHTML = rows.map((r,i)=>`
+    <tr style="background:${i%2===0?'white':'#f9fafb'};border-bottom:1px solid var(--border);">
+      <td style="padding:5px 10px;color:var(--muted);">${i+1}</td>
+      <td style="padding:5px 10px;font-weight:600;">${r.xuong}</td>
+      <td style="padding:5px 10px;">${r.khu_vuc}</td>
+      <td style="padding:5px 10px;color:var(--muted);">${r.phu_trach||'—'}</td>
+      <td style="padding:5px 10px;font-size:10px;color:var(--teal);font-family:monospace;">${r.ma_qr_preview}</td>
+    </tr>`).join('');
+
+  document.getElementById('qr-imp-step1').style.display = 'none';
+  document.getElementById('qr-imp-step2').style.display = '';
+  document.getElementById('qr-imp-confirm-btn').style.display = '';
+}
+
+async function confirmQRImport() {
+  if (!qrImportRows.length) return;
+  if (!confirm(`Xác nhận xóa toàn bộ QR cũ và import ${qrImportRows.length} khu vực mới?`)) return;
+  const btn = document.getElementById('qr-imp-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Đang import...';
+  try {
+    const res = await fetch('/api/qrcore.php', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'import', replace:true, rows:qrImportRows}),
+    });
+    const d = await res.json();
+    if (!d.success) throw new Error(d.error||'Import thất bại');
+    showToast(`✅ Import xong! ${d.inserted} khu vực`, 'success', 5000);
+    closeModal('modal-qr-import');
+    // Reload QR data
+    const qrRes = await fetch('/api/qrcore.php?action=list').then(r=>r.json());
+    allQR = Array.isArray(qrRes) ? qrRes : [];
+    renderQRTable();
+  } catch(e) {
+    showToast(e.message||'Lỗi import', 'error');
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> Xác nhận Import (Xóa & Thay mới)';
+  }
 }
 
 // ── Top NV modal ──────────────────────────────────────────────
@@ -1240,6 +1418,9 @@ const TV_IMPORT_COLS = {
   'họ tên':  'ho_ten',
   'ho ten':  'ho_ten',
   'họ và tên': 'ho_ten',
+  'ho va ten *': 'ho_ten',
+  'ho va ten': 'ho_ten',
+  'họ và tên *': 'ho_ten',
   'bo_phan': 'bo_phan',
   'bộ phận': 'bo_phan',
   'bo phan': 'bo_phan',
@@ -1255,9 +1436,9 @@ const TV_IMPORT_COLS = {
 };
 
 const TV_ROLE_ALIAS = {
-  'nhanvien': 'nhanvien', 'nhân viên': 'nhanvien', 'nhan vien': 'nhanvien', 'nv': 'nhanvien',
-  'nguoikhacphuc': 'nguoikhacphuc', 'người khắc phục': 'nguoikhacphuc', 'khắc phục': 'nguoikhacphuc', 'kp': 'nguoikhacphuc',
-  'quanly': 'quanly', 'quản lý': 'quanly', 'quan ly': 'quanly', 'ql': 'quanly',
+  'nhanvien': 'nhanvien', 'nhân viên': 'nhanvien', 'nhan vien': 'nhanvien', 'nv': 'nhanvien', 'NV': 'nhanvien',
+  'nguoikhacphuc': 'nguoikhacphuc', 'người khắc phục': 'nguoikhacphuc', 'khắc phục': 'nguoikhacphuc', 'kp': 'nguoikhacphuc', 'KP': 'nguoikhacphuc',
+  'quanly': 'quanly', 'quản lý': 'quanly', 'quan ly': 'quanly', 'ql': 'quanly', 'QL': 'quanly',
 };
 
 function openTVImport() {
@@ -1297,17 +1478,26 @@ async function handleTVImportFile(file) {
 
   if (!raw || raw.length < 2) { showToast('File không có dữ liệu (cần ít nhất 1 dòng tiêu đề + 1 dòng data)', 'error'); return; }
 
-  // Map tiêu đề cột
-  const headers = raw[0].map(h => (h + '').toLowerCase().trim());
-  const colMap  = {};  // index → field
-  headers.forEach((h, i) => { const f = TV_IMPORT_COLS[h]; if (f) colMap[i] = f; });
+  // Tìm dòng header (dòng nào có cột ho_ten hoặc ho va ten)
+  let headerRowIdx = 0;
+  const colMap = {};
+  for (let ri = 0; ri < Math.min(raw.length, 10); ri++) {
+    const tryHeaders = raw[ri].map(h => (h + '').toLowerCase().trim());
+    const tryMap = {};
+    tryHeaders.forEach((h, i) => { const f = TV_IMPORT_COLS[h]; if (f) tryMap[i] = f; });
+    if (Object.values(tryMap).includes('ho_ten')) {
+      headerRowIdx = ri;
+      Object.assign(colMap, tryMap);
+      break;
+    }
+  }
 
   if (!Object.values(colMap).includes('ho_ten')) {
     showToast('Không tìm thấy cột "ho_ten" hoặc "Họ tên" trong file', 'error'); return;
   }
 
   const rows = [];
-  for (let i = 1; i < raw.length; i++) {
+  for (let i = headerRowIdx + 1; i < raw.length; i++) {
     const row = raw[i];
     if (row.every(c => (c + '').trim() === '')) continue; // bỏ dòng trống
     const obj = {};
