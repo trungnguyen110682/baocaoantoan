@@ -13,7 +13,8 @@
       "Bash(where wamp *)",
       "Read(//c/xampp/**)",
       "Read(//c//**)",
-      "Bash(where docker *)"
+      "Bash(where docker *)",
+      "Bash(git add *)"
     ]
   }
 }

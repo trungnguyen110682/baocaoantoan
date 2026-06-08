@@ -1,0 +1,43 @@
+Options -Indexes
+Options -MultiViews
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# PHP settings
+<IfModule mod_php.c>
+    php_flag display_errors off
+    php_value upload_max_filesize 10M
+    php_value post_max_size 10M
+    php_value max_execution_time 60
+</IfModule>
+
+# Protect raw data files
+<FilesMatch "\.(json|csv|sql|log)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Block direct access to sensitive dirs
+    RewriteRule ^(config|includes|database)/ - [F,L]
+
+    # Allow OPTIONS (CORS preflight)
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule .* - [L]
+
+    # Friendly URLs
+    RewriteRule ^login/?$       pages/login.php     [L,QSA]
+    RewriteRule ^dashboard/?$   pages/dashboard.php [L,QSA]
+    RewriteRule ^admin/?$       pages/admin.php     [L,QSA]
+    RewriteRule ^baocaomoi/?$   pages/baocaomoi.php [L,QSA]
+    RewriteRule ^gemba/?$       pages/gemba.php     [L,QSA]
+    RewriteRule ^khacphuc/?$    pages/khacphuc.php  [L,QSA]
+</IfModule>
