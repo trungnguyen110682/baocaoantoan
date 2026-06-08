@@ -178,6 +178,9 @@ ob_start();
 echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 echo '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
 
+// sheetViews phải đứng trước cols và sheetData
+echo '<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
+
 // Column widths
 echo '<cols>';
 foreach ($colWidths as $i => $w) {
@@ -235,9 +238,6 @@ for ($r = 10; $r <= 25; $r++) {
 }
 
 echo '</sheetData>';
-
-// Freeze row 4 (pane below header)
-echo '<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
 
 // Merge cells
 echo '<mergeCells count="2">';
