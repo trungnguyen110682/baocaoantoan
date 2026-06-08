@@ -18,6 +18,8 @@ jobs:
           server: 113.167.117.46
           username: trungn1
           password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
           local-dir: ./baocaoantoan/
           server-dir: /htdocs/antoan-msi.io.vn/
           exclude: |
