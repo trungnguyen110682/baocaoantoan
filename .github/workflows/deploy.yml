@@ -9,21 +9,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: 113.167.117.46
-          username: trungn1
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          local-dir: ./baocaoantoan/
-          server-dir: /htdocs/antoan-msi.io.vn/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/backup/**
-            **/.claude/**
+      - name: Trigger deploy webhook
+        run: |
+          curl -f "https://antoan-msi.io.vn/deploy.php?token=msi-deploy-2026-secret" \
+            --max-time 120 \
+            --retry 2 \
+            -s -o deploy_output.txt -w "\nHTTP Status: %{http_code}\n"
+          cat deploy_output.txt
