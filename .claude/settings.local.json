@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python create_tv_template.py)",
+      "Bash(python3 \"C:\\\\Users\\\\AUTO_F5\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\skills-plugin\\\\bd9cbed1-6b81-4b47-8cfd-9daa811ef489\\\\250daf37-f478-4255-8bc4-bb9922e4872a\\\\skills\\\\xlsx\\\\create_tv_template.py\")",
+      "Bash(py -3 \"C:\\\\Users\\\\AUTO_F5\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\skills-plugin\\\\bd9cbed1-6b81-4b47-8cfd-9daa811ef489\\\\250daf37-f478-4255-8bc4-bb9922e4872a\\\\skills\\\\xlsx\\\\create_tv_template.py\")",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Read(//usr/**)",
+      "Read(//usr/local/**)",
+      "Bash(where php *)",
+      "Bash(where xampp *)",
+      "Bash(where wamp *)",
+      "Read(//c/xampp/**)",
+      "Read(//c//**)",
+      "Bash(where docker *)"
+    ]
+  }
+}
