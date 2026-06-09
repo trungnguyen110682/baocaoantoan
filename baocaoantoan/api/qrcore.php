@@ -75,14 +75,14 @@ if ($method === 'POST') {
                 }
 
                 // Tạo ma_qr từ tên xưởng + khu vực
-                $maQR = generateQRCode($xuong, $khuVuc);
+                $baseQR = generateQRCode($xuong, $khuVuc);
 
-                // Kiểm tra trùng
-                $exists = dbOne("SELECT id FROM qrcore WHERE ma_qr = ?", [$maQR]);
-                if ($exists) {
-                    // thêm số thứ tự nếu trùng
-                    $count = dbValue("SELECT COUNT(*) FROM qrcore WHERE xuong = ? AND khu_vuc = ?", [$xuong, $khuVuc]);
-                    $maQR .= '-' . ($count + 1);
+                // Đảm bảo ma_qr duy nhất
+                $maQR = $baseQR;
+                $suffix = 2;
+                while (dbOne("SELECT id FROM qrcore WHERE ma_qr = ?", [$maQR])) {
+                    $maQR = $baseQR . '-' . $suffix;
+                    $suffix++;
                 }
 
                 dbExec(
