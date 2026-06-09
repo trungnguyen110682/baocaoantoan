@@ -9,6 +9,10 @@
       <select class="fsel-sm" id="qr-filter-xuong" onchange="renderQRList()">
         <option value="">Tất cả xưởng</option>
       </select>
+      <a href="/api/template_qr.php" class="btn btn-ghost btn-sm" style="color:var(--navy);text-decoration:none;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 9v2H5v-2h6zm4 0v2h-2v-2h2zm4 0v2h-2v-2h2z"/></svg>
+        Tải mẫu Excel
+      </a>
       <button class="btn btn-ghost btn-sm" onclick="openQRImport()" style="color:var(--teal);">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
         Import Excel
